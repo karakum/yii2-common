@@ -23,7 +23,7 @@
     },
     "require": {
         "yiisoft/yii2": "*",
-        "karakum/yii2-path-registry": "^0.2.0",
+        "karakum/yii2-path-registry": ">=0.3.0",
         "gargron/fileupload": "^1.1",
         "intervention/image": "^2.3",
         "limion/yii2-jquery-fileupload-widget": "~1.0",
