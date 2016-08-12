@@ -1,0 +1,38 @@
+{
+    "name": "karakum/yii2-common",
+    "description": "This extension provides a directory generator for file storage based on the maximum occupancy directory.",
+    "type": "yii2-extension",
+    "keywords": [
+        "yii2",
+        "extension",
+        "upload",
+        "path",
+        "registry"
+    ],
+    "homepage": "https://github.com/karakum/yii2-common",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Andrey Shertsinger",
+            "email": "andrey@shertsinger.ru",
+            "role": "Maintainer"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/karakum/yii2-common/issues",
+        "source": "https://github.com/karakum/yii2-common"
+    },
+    "require": {
+        "yiisoft/yii2": "*",
+        "karakum/yii2-path-registry": "^0.2.0",
+        "gargron/fileupload": "^1.1",
+        "intervention/image": "^2.3",
+        "limion/yii2-jquery-fileupload-widget": "~1.0",
+        "bower-asset/cropper": "*"
+    },
+    "autoload": {
+        "psr-4": {
+            "karakum\\common\\": "src/"
+        }
+    }
+}
