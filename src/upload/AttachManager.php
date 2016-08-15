@@ -2,6 +2,7 @@
 
 namespace karakum\common\upload;
 
+use finfo;
 use karakum\common\upload\models\Attachment;
 use karakum\common\upload\models\Thumbnails;
 use FileUpload\File;
@@ -62,6 +63,139 @@ class AttachManager extends Component
         /** @var PathManager $pathManager */
         $pathManager = Yii::$app->pathManager;
         return $pathManager;
+    }
+
+    /**
+     * @param $storageNamespace
+     * @param $validatorProfile
+     * @param $thumbnailProfile
+     * @param $attribute
+     * @param Attachment $image
+     * @param Attachment $thumb
+     * @param \Closure $attachCallback
+     * @return array
+     */
+    public function importImage($storageNamespace, $validatorProfile, $thumbnailProfile, $filename, $image, $thumb, \Closure $attachCallback)
+    {
+        $pathManager = $this->getPathManager();
+
+        // Simple validation (max file size 2MB and only two allowed mime types)
+        $validatorProfile = $this->getValidatorProfile($validatorProfile);
+        $validator = new \FileUpload\Validator\Simple($validatorProfile['size'], $validatorProfile['mimeType']);
+        $thumbProfile = $this->getThumbnailProfile($thumbnailProfile);
+
+
+        // Simple path resolver, where uploads will be put
+        $pathResolver = new HashPathResolver($storageNamespace);
+
+        // The machine's filesystem
+        $fileSystem = new ImportFilesystem();
+
+        $finfo = new finfo(FILEINFO_MIME_TYPE);
+
+        $upload = [
+            'name' => basename($filename),
+            'type' => $finfo->file($filename),
+            'tmp_name' => $filename,
+            'error' => UPLOAD_ERR_OK,
+            'size' => $fileSystem->getFilesize($filename),
+        ];
+
+        $fileUpload = new FileUpload($upload, $_SERVER);
+
+        $fileNameGenerator = new RandomNameGenerator();
+        $fileUpload->setFileNameGenerator($fileNameGenerator);
+        $fileUpload->setPathResolver($pathResolver);
+        $fileUpload->setFileSystem($fileSystem);
+        $fileUpload->addValidator($validator);
+
+        $oldFiles = [];
+        if ($image->file) {
+            $oldFiles = $this->collectOldFiles($image, $oldFiles);
+        }
+        if ($thumb->file) {
+            $oldFiles = $this->collectOldFiles($thumb, $oldFiles);
+        }
+
+        $fileUpload->addCallback('completed', function (File $file) use ($pathManager, $attachCallback, $fileUpload, $image, $thumb, $thumbProfile) {
+            Yii::error($file);
+            $res = false;
+            $pathResolver = $fileUpload->getPathResolver();
+            $fileNameGenerator = $fileUpload->getFileNameGenerator();
+            $fileSystem = $fileUpload->getFileSystem();
+
+            /** @var PathOrganizer $pathOrganizer */
+            $pathOrganizer = $pathResolver->getFileData($file->name);
+            if ($pathOrganizer) {
+                $pathManager->countUpPath($pathOrganizer);
+
+                $newImage = new Attachment();
+                $newImage->attributes = $image->attributes;
+
+                $newImage->path_id = $pathOrganizer->id;
+                $newImage->name = $fileNameGenerator->getOriginalName($file->name);
+                $newImage->file = $pathOrganizer->path . '/' . $file->name;
+                $newImage->mime_type = $file->type;
+                $newImage->size = $fileSystem->getFilesize($newImage->getFullName());
+
+                $thImg = ImageManagerStatic::make($file->path);
+                $thImg->resize($thumbProfile['width'], $thumbProfile['height']);
+                $thumbName = $fileNameGenerator->getFileName('thumb' . $file->name, $file->type, null, 0, null, $fileUpload);
+                $thumbPath = $pathResolver->getUploadPath($thumbName);
+
+                /** @var PathOrganizer $pathThumbOrganizer */
+                $pathThumbOrganizer = $pathResolver->getFileData($thumbName);
+                $thImg->save($thumbPath);
+
+                $pathManager->countUpPath($pathThumbOrganizer);
+
+                $newThumb = new Attachment();
+                $newThumb->attributes = $thumb->attributes;
+                $newThumb->path_id = $pathThumbOrganizer->id;
+                $newThumb->name = $newImage->name;
+                $newThumb->file = $pathThumbOrganizer->path . '/' . $thumbName;
+                $newThumb->mime_type = $file->type;
+                $newThumb->size = $fileSystem->getFilesize($thumbPath);
+
+                if ($attachCallback($file, $newImage, $newThumb)) {
+                    $res = true;
+                } else {
+                    $pathManager->countDownPath($pathOrganizer);
+                    $pathManager->countDownPath($pathThumbOrganizer);
+                }
+            }
+            if (!$res) {
+                if ($fileSystem->isFile($file->path)) {
+                    $fileSystem->unlink($file->path);
+                }
+                $file->error_code = 100;
+            }
+
+        });
+
+        // Doing the deed
+        list($files, $headers) = $fileUpload->processAll();
+
+        $result = array_filter(array_map(
+            function ($file) {
+                if (!is_numeric($file->error)) {
+                    $file->error = Yii::t('app', $file->error);
+                }
+                return $file;
+            }, $files),
+            function ($file) {
+                return $file->error_code != 100;
+            });
+        $result2 = array_filter($files, function ($file) {
+            return $file->error_code == 0;
+        });
+        if (count($result2)) {
+            Attachment::deleteAll(['id' => [$image->id, $thumb->id]]);
+            // удаляем старые только при успешной загрузке новых
+            $this->deleteOldFiles($oldFiles);
+        }
+
+        return ['files' => $result];
     }
 
     /**
@@ -185,6 +319,7 @@ class AttachManager extends Component
             return $file->error_code == 0;
         });
         if (count($result2)) {
+            Attachment::deleteAll(['id' => [$image->id, $thumb->id]]);
             // удаляем старые только при успешной загрузке новых
             $this->deleteOldFiles($oldFiles);
         }
