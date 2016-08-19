@@ -94,10 +94,10 @@ class MarkDeletedBehavior extends Behavior
                 ]);
                 $this->refresh();
             } elseif ($changedAttributes[$this->statusAttribute] == $this->deletedStatus) {
-                $this->updateAttributes([
+                $model->updateAttributes([
                     $this->deletedAtAttribute => null,
                 ]);
-                $this->refresh();
+                $model->refresh();
             }
         }
     }
