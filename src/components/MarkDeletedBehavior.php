@@ -77,7 +77,7 @@ class MarkDeletedBehavior extends Behavior
             $model->updateAttributes([
                 $this->deletedAtAttribute => new Expression('NOW()'),
             ]);
-            $this->refresh();
+            $model->refresh();
         }
     }
 
@@ -92,7 +92,7 @@ class MarkDeletedBehavior extends Behavior
                 $model->updateAttributes([
                     $this->deletedAtAttribute => new Expression('NOW()'),
                 ]);
-                $this->refresh();
+                $model->refresh();
             } elseif ($changedAttributes[$this->statusAttribute] == $this->deletedStatus) {
                 $model->updateAttributes([
                     $this->deletedAtAttribute => null,
@@ -107,10 +107,9 @@ class MarkDeletedBehavior extends Behavior
         /** @var ActiveRecord $model */
         $model = $event->sender;
         if ($model->getAttribute($this->statusAttribute) != $this->deletedStatus) {
-            $model->updateAttributes([
-                $this->statusAttribute => $this->deletedStatus,
-                $this->deletedAtAttribute => new Expression('NOW()'),
-            ]);
+            $model->setAttribute($this->statusAttribute, $this->deletedStatus);
+            $model->setAttribute($this->deletedAtAttribute, new Expression('NOW()'));
+            $model->save(false, [$this->statusAttribute, $this->deletedAtAttribute]);
             $model->refresh();
             if ($this->onMarkFlashMessage) {
                 Yii::$app->session->addFlash('success', Yii::$app->getI18n()->format($this->onMarkFlashMessage, [
