@@ -105,7 +105,7 @@ class Attachment extends StatusActiveRecord
 
     public function getUrl()
     {
-        return $this->path->getBaseUrl($this->file);
+        return $this->path->getUrl($this->file, ['id' => $this->id, 'name' => $this->name]);
     }
 
     /**
