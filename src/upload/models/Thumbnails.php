@@ -106,7 +106,7 @@ class Thumbnails extends ActiveRecord
 
     public function getUrl()
     {
-        return $this->path->getUrl($this->file, ['id' => $this->id, 'name' => $this->name]);
+        return $this->path->getUrl($this->file, ['id' => $this->id, 'name' => basename($this->file)]);
     }
 
 }
