@@ -87,7 +87,7 @@ class Thumbnails extends ActiveRecord
      */
     public function getUser()
     {
-        return $this->hasOne(Users::className(), ['id' => 'user_id']);
+        return $this->hasOne(Yii::$app->user->identityClass, ['id' => 'user_id']);
     }
 
     /**
@@ -106,7 +106,7 @@ class Thumbnails extends ActiveRecord
 
     public function getUrl()
     {
-        return $this->path->getBaseUrl($this->file);
+        return $this->path->getUrl($this->file, ['id' => $this->id, 'name' => $this->name]);
     }
 
 }
