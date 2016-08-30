@@ -24,7 +24,7 @@
     "require": {
         "yiisoft/yii2": "*",
         "karakum/yii2-path-registry": ">=0.4.0",
-        "gargron/fileupload": "@dev",
+        "gargron/fileupload": "dev-master",
         "intervention/image": "^2.3",
         "limion/yii2-jquery-fileupload-widget": "~1.0",
         "bower-asset/cropper": "*"
