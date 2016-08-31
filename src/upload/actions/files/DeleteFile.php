@@ -1,35 +1,33 @@
 <?php
-/**
- * Created by PhpStorm.
- * User: Андрейка
- * Date: 10.06.2016
- * Time: 17:15
- */
 
-namespace app\components\upload\actions\pictures;
+namespace karakum\common\upload\actions\files;
 
 
-use app\components\upload\AttachManager;
-use app\models\Pictures;
+use karakum\common\upload\AttachManager;
+use karakum\common\upload\models\Attachment;
 use Yii;
 use yii\base\Action;
 use yii\base\InvalidConfigException;
 use yii\base\Model;
+use yii\db\ActiveRecord;
 use yii\web\NotFoundHttpException;
 
-class DeletePicture extends Action
+class DeleteFile extends Action
 {
     /**
      * @var callable Замыкание для получения модели по ID.
      */
     public $getModel;
+    public $fileClass;
+    public $fileAttachmentAttr;
+    public $fileThumbnailAttr;
 
     /**
-     * @var string Атрибут Picture для связи с моделью
+     * @var string Атрибут для связи с моделью
      */
-    public $pictureLinkTo;
+    public $fileLinkTo;
 
-    public function run($id, $p)
+    public function run($id, $f)
     {
         if (!is_callable($this->getModel)) {
             throw new InvalidConfigException('Action must have \'getModel\' callable property');
@@ -37,26 +35,31 @@ class DeletePicture extends Action
         /** @var Model $model */
         $model = call_user_func($this->getModel, $id);
 
-        /** @var Pictures $picture */
-        $picture = Pictures::find()->andWhere([
-            'id' => $p,
-            $this->pictureLinkTo => $model->id,
+        $fileClass = $this->fileClass;
+        /** @var ActiveRecord $file */
+        $file = $fileClass::find()->andWhere([
+            'id' => $f,
+            $this->fileLinkTo => $model->id,
         ])->one();
 
-        if (!$picture) {
+        if (!$file) {
             throw new NotFoundHttpException('Запрошенная страница не существует.');
         }
 
-        $image = $picture->image;
-        $thumb = $picture->thumb;
+        $image = Attachment::findOne($file->getAttribute($this->fileAttachmentAttr));
+        if ($this->fileThumbnailAttr) {
+            $thumb = Attachment::findOne($file->getAttribute($this->fileThumbnailAttr));
+        } else {
+            $thumb = null;
+        }
 
         $attachList = array_filter([$image, $thumb]);
 
         if (count($attachList)) {
-            $transaction = $picture->getDb()->beginTransaction();
+            $transaction = $file->getDb()->beginTransaction();
             $res = false;
             /** @var AttachManager $attachManager */
-            $attachManager = Yii::$app->attachService;
+            $attachManager = Yii::$app->attachManager;
 
             if ($attachManager->removeAttachments($attachList)) {
                 $res = true;
@@ -69,12 +72,12 @@ class DeletePicture extends Action
                 ];
             } else {
                 $result = [
-                    'error' => Yii::t('app', 'There are error occured while removing images'),
+                    'error' => Yii::t('app', 'There are error occured while removing files'),
                 ];
             }
         } else {
             $result = [
-                'error' => Yii::t('app', 'There is no images'),
+                'error' => Yii::t('app', 'There is no files'),
             ];
         }
 

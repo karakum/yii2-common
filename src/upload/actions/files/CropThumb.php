@@ -1,33 +1,36 @@
 <?php
 
-namespace karakum\common\upload\actions\pictures;
+namespace karakum\common\upload\actions\files;
 
 use karakum\common\upload\AttachManager;
-use app\models\Attachment;
-use app\models\Pictures;
+use karakum\common\upload\models\Attachment;
 use Yii;
 use yii\base\Action;
 use yii\base\InvalidConfigException;
 use yii\base\Model;
+use yii\db\ActiveRecord;
 use yii\web\NotFoundHttpException;
 
-class CropPictureThumb extends Action
+class CropThumb extends Action
 {
     /**
      * @var callable Замыкание для получения модели по ID.
      */
     public $getModel;
+    public $fileClass;
+    public $fileAttachmentAttr;
+    public $fileThumbnailAttr;
 
     /**
      * @var string Атрибут Picture для связи с моделью
      */
-    public $pictureLinkTo;
+    public $fileLinkTo;
     public $pathNamespace;
     public $thumbnailProfile;
 
     public $resizeThumbnail = false;
 
-    public function run($id, $p)
+    public function run($id, $f)
     {
         if (!is_callable($this->getModel)) {
             throw new InvalidConfigException('Action must have \'getModel\' callable property');
@@ -35,13 +38,14 @@ class CropPictureThumb extends Action
         /** @var Model $model */
         $model = call_user_func($this->getModel, $id);
 
-        /** @var Pictures $picture */
-        $picture = Pictures::find()->andWhere([
-            'id' => $p,
-            $this->pictureLinkTo => $model->id,
+        $fileClass = $this->fileClass;
+        /** @var ActiveRecord $file */
+        $file = $fileClass::find()->andWhere([
+            'id' => $f,
+            $this->fileLinkTo => $model->id,
         ])->one();
 
-        if (!$picture) {
+        if (!$file) {
             throw new NotFoundHttpException('Запрошенная страница не существует.');
         }
 
@@ -54,8 +58,8 @@ class CropPictureThumb extends Action
         $top = (int)$request->post('y');
 
         if (isset($width) and isset($height) and isset($left) and isset($top)) {
-            $image = $picture->image;
-            $thumb = $picture->thumb;
+            $image = Attachment::findOne($file->getAttribute($this->fileAttachmentAttr));
+            $thumb = Attachment::findOne($file->getAttribute($this->fileThumbnailAttr));
             if (!$thumb) {
                 $thumb = new Attachment([
                     'user_id' => Yii::$app->user->id,
@@ -67,20 +71,29 @@ class CropPictureThumb extends Action
                  * @param Attachment $thumb
                  * @return bool
                  */
-                $avatarCallback = function ($image, $thumb) use ($picture) {
+                $avatarCallback = function ($image, $thumb) use ($file, $model) {
                     if ($thumb->save()) {
-                        $picture->thumb_id = $thumb->id;
-                        if ($picture->save()) {
+                        $file->setAttribute($this->fileAttachmentAttr, $image->id);
+                        $file->setAttribute($this->fileThumbnailAttr, $thumb->id);
+                        if ($file->save()) {
+
+                            if ($this->resizeThumbnail) {
+                                /** @var AttachManager $attachManager */
+                                $attachManager = Yii::$app->attachManager;
+                                $th = $attachManager->getThumbnail($thumb, $this->resizeThumbnail[0], $this->resizeThumbnail[1])->getUrl([$this->fileLinkTo => $model->id]);
+                            } else {
+                                $th = $thumb->getUrl([$this->fileLinkTo => $model->id]);
+                            }
                             return [
-                                'p' => $picture->id,
-                                'thumb' => $thumb->getUrl(),
+                                'f' => $file->id,
+                                'thumb' => $th,
                             ];
                         }
                     }
                     return false;
                 };
                 /** @var AttachManager $attachManager */
-                $attachManager = Yii::$app->attachService;
+                $attachManager = Yii::$app->attachManager;
                 $result = $attachManager->cropThumb(
                     $this->pathNamespace,
                     $this->thumbnailProfile,
@@ -94,10 +107,6 @@ class CropPictureThumb extends Action
                     $thumb,
                     $avatarCallback
                 );
-                if ($this->resizeThumbnail) {
-                    $picture->refresh();
-                    $result['thumb'] = $attachManager->getThumbnail($picture->thumb, $this->resizeThumbnail[0], $this->resizeThumbnail[1])->getUrl();
-                }
             } else {
                 $result = [
                     'error' => Yii::t('app', 'Image empty'),

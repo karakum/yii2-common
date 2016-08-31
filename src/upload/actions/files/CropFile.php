@@ -1,30 +1,33 @@
 <?php
 
-namespace karakum\common\upload\actions\pictures;
+namespace karakum\common\upload\actions\files;
 
 use karakum\common\upload\AttachManager;
-use app\models\Attachment;
-use app\models\Pictures;
+use karakum\common\upload\models\Attachment;
 use Yii;
 use yii\base\Action;
 use yii\base\InvalidConfigException;
 use yii\base\Model;
+use yii\db\ActiveRecord;
 use yii\web\NotFoundHttpException;
 
-class CropPicture extends Action
+class CropFile extends Action
 {
     /**
      * @var callable Замыкание для получения модели по ID.
      */
     public $getModel;
+    public $fileClass;
+    public $fileAttachmentAttr;
+    public $fileThumbnailAttr;
 
     /**
      * @var string Атрибут Picture для связи с моделью
      */
-    public $pictureLinkTo;
+    public $fileLinkTo;
     public $pathNamespace;
 
-    public function run($id, $p)
+    public function run($id, $f)
     {
         if (!is_callable($this->getModel)) {
             throw new InvalidConfigException('Action must have \'getModel\' callable property');
@@ -32,13 +35,14 @@ class CropPicture extends Action
         /** @var Model $model */
         $model = call_user_func($this->getModel, $id);
 
-        /** @var Pictures $picture */
-        $picture = Pictures::find()->andWhere([
-            'id' => $p,
-            $this->pictureLinkTo => $model->id,
+        $fileClass = $this->fileClass;
+        /** @var ActiveRecord $file */
+        $file = $fileClass::find()->andWhere([
+            'id' => $f,
+            $this->fileLinkTo => $model->id,
         ])->one();
 
-        if (!$picture) {
+        if (!$file) {
             throw new NotFoundHttpException('Запрошенная страница не существует.');
         }
 
@@ -51,26 +55,26 @@ class CropPicture extends Action
         $top = (int)$request->post('y');
 
         if (isset($width) and isset($height) and isset($left) and isset($top)) {
-            $image = $picture->image;
+            $image = Attachment::findOne($file->getAttribute($this->fileAttachmentAttr));
             if ($image) {
                 /**
                  * @param Attachment $image
                  * @return bool
                  */
-                $avatarCallback = function ($image) use ($picture) {
+                $avatarCallback = function ($image) use ($file,$model) {
                     if ($image->save()) {
-                        $picture->image_id = $image->id;
-                        if ($picture->save()) {
+                        $file->setAttribute($this->fileAttachmentAttr, $image->id);
+                        if ($file->save()) {
                             return [
-                                'p' => $picture->id,
-                                'photo' => $image->getUrl(),
+                                'f' => $file->id,
+                                'photo' => $image->getUrl([$this->fileLinkTo => $model->id]),
                             ];
                         }
                     }
                     return false;
                 };
                 /** @var AttachManager $attachManager */
-                $attachManager = Yii::$app->attachService;
+                $attachManager = Yii::$app->attachManager;
                 $result = $attachManager->cropImage(
                     $this->pathNamespace,
                     [

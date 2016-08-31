@@ -24,6 +24,9 @@ class AttachManager extends Component
 
     public $validators;
     public $thumbnails;
+    public $fileIcons;
+
+    private $mimeTypes;
 
     public function __construct($config = [])
     {
@@ -36,7 +39,15 @@ class AttachManager extends Component
     public function init()
     {
         parent::init();
+        $this->mimeTypes = [];
 
+        if ($this->fileIcons) {
+            foreach ($this->fileIcons as $mt => $icon) {
+                foreach (preg_split('/[\s,]+/', strtolower($mt), -1, PREG_SPLIT_NO_EMPTY) as $mimeType) {
+                    $this->mimeTypes[$mimeType] = $icon;
+                }
+            }
+        }
     }
 
     public function getValidatorProfile($name)
@@ -199,16 +210,16 @@ class AttachManager extends Component
     }
 
     /**
+     * @param $uploads
      * @param $storageNamespace
      * @param $validatorProfile
      * @param $thumbnailProfile
-     * @param $attribute
      * @param Attachment $image
      * @param Attachment $thumb
      * @param \Closure $attachCallback
      * @return array
      */
-    public function uploadImage($storageNamespace, $validatorProfile, $thumbnailProfile, $attribute, $image, $thumb, \Closure $attachCallback)
+    public function uploadImage($uploads, $storageNamespace, $validatorProfile, $thumbnailProfile, $image, $thumb, \Closure $attachCallback)
     {
         $pathManager = $this->getPathManager();
 
@@ -224,8 +235,7 @@ class AttachManager extends Component
         // The machine's filesystem
         $fileSystem = new \FileUpload\FileSystem\Simple();
 
-//        Yii::error($_FILES[$attribute]);
-        $fileUpload = new FileUpload(isset($_FILES[$attribute]) ? $_FILES[$attribute] : null, $_SERVER);
+        $fileUpload = new FileUpload($uploads, $_SERVER);
 
         $fileNameGenerator = new RandomNameGenerator();
         $fileUpload->setFileNameGenerator($fileNameGenerator);
@@ -237,12 +247,14 @@ class AttachManager extends Component
         if ($image->file) {
             $oldFiles = $this->collectOldFiles($image, $oldFiles);
         }
-        if ($thumb->file) {
+        if ($thumb && $thumb->file) {
             $oldFiles = $this->collectOldFiles($thumb, $oldFiles);
         }
-
+        $fileUpload->addCallback('beforeValidation', function (File $file) use ($fileUpload) {
+            $fileNameGenerator = $fileUpload->getFileNameGenerator();
+            $file->originalName = $fileNameGenerator->getOriginalName($file->name);
+        });
         $fileUpload->addCallback('completed', function (File $file) use ($pathManager, $attachCallback, $fileUpload, $image, $thumb, $thumbProfile) {
-            Yii::error($file);
             $res = false;
             $pathResolver = $fileUpload->getPathResolver();
             $fileNameGenerator = $fileUpload->getFileNameGenerator();
@@ -262,30 +274,46 @@ class AttachManager extends Component
                 $newImage->mime_type = $file->type;
                 $newImage->size = $fileSystem->getFilesize($newImage->getFullName());
 
-                $thImg = ImageManagerStatic::make($file->path);
-                $thImg->resize($thumbProfile['width'], $thumbProfile['height']);
-                $thumbName = $fileNameGenerator->getFileName('thumb' . $file->name, $file->type, null, 0, null, $fileUpload);
-                $thumbPath = $pathResolver->getUploadPath($thumbName);
+                $newThumb = false;
+                $pathThumbOrganizer = false;
+                try {
+                    $thImg = ImageManagerStatic::make($file->path);
+                    $w = $thImg->getWidth();
+                    $h = $thImg->getHeight();
+                    $width = $thumbProfile['width'];
+                    $height = $thumbProfile['height'];
+                    if ($width == $height && $w != $h) {// если запросили квадрат, но имеем прямоугольник - вырежем квадрат по центру
+                        $minSide = min($w, $h);
+                        $thImg->crop($minSide, $minSide, (int)(($w - $minSide) / 2), (int)(($h - $minSide) / 2));
+                    }
+                    $thImg->resize($thumbProfile['width'], $thumbProfile['height']);
+                    $thumbName = $fileNameGenerator->getFileName('thumb' . $file->name, $file->type, null, 0, null, $fileUpload);
+                    $thumbPath = $pathResolver->getUploadPath($thumbName);
 
-                /** @var PathOrganizer $pathThumbOrganizer */
-                $pathThumbOrganizer = $pathResolver->getFileData($thumbName);
-                $thImg->save($thumbPath);
+                    /** @var PathOrganizer $pathThumbOrganizer */
+                    $pathThumbOrganizer = $pathResolver->getFileData($thumbName);
+                    $thImg->save($thumbPath);
 
-                $pathManager->countUpPath($pathThumbOrganizer);
+                    $pathManager->countUpPath($pathThumbOrganizer);
 
-                $newThumb = new Attachment();
-                $newThumb->attributes = $thumb->attributes;
-                $newThumb->path_id = $pathThumbOrganizer->id;
-                $newThumb->name = $newImage->name;
-                $newThumb->file = $pathThumbOrganizer->path . '/' . $thumbName;
-                $newThumb->mime_type = $file->type;
-                $newThumb->size = $fileSystem->getFilesize($thumbPath);
+                    $newThumb = new Attachment();
+                    $newThumb->attributes = $thumb->attributes;
+                    $newThumb->path_id = $pathThumbOrganizer->id;
+                    $newThumb->name = $newImage->name;
+                    $newThumb->file = $pathThumbOrganizer->path . '/' . $thumbName;
+                    $newThumb->mime_type = $file->type;
+                    $newThumb->size = $fileSystem->getFilesize($thumbPath);
+                } catch (\Exception $e) {
+                    // not image
+                }
 
                 if ($attachCallback($file, $newImage, $newThumb)) {
                     $res = true;
                 } else {
                     $pathManager->countDownPath($pathOrganizer);
-                    $pathManager->countDownPath($pathThumbOrganizer);
+                    if ($pathThumbOrganizer) {
+                        $pathManager->countDownPath($pathThumbOrganizer);
+                    }
                 }
             }
             if (!$res) {
@@ -465,9 +493,10 @@ class AttachManager extends Component
      * @param $thumb Attachment
      * @param $width
      * @param $height
+     * @param string $thumbNS
      * @return Thumbnails
      */
-    public function getThumbnail($thumb, $width, $height)
+    public function getThumbnail($thumb, $width, $height, $thumbNS = 'thumbs')
     {
 
         $th = null;
@@ -482,7 +511,7 @@ class AttachManager extends Component
             return $th;
         }
 
-        $pathResolver = new HashPathResolver('thumbs');
+        $pathResolver = new HashPathResolver($thumbNS);
         $fileSystem = new \FileUpload\FileSystem\Simple();
         $fileNameGenerator = new RandomNameGenerator();
 
@@ -590,5 +619,32 @@ class AttachManager extends Component
                 $pathManager->countDownPath($pathObj);
             }
         }
+    }
+
+
+    public function getIcon($mimeType)
+    {
+        foreach ($this->mimeTypes as $mimeTypeReg => $icon) {
+            if ($mimeTypeReg === $mimeType) {
+                return $icon;
+            }
+
+            if (strpos($mimeTypeReg, '*') !== false && preg_match($this->buildMimeTypeRegexp($mimeTypeReg), $mimeType)) {
+                return $icon;
+            }
+        }
+        return 'fa fa-file';
+    }
+
+    /**
+     * Builds the RegExp from the $mask
+     *
+     * @param string $mask
+     * @return string the regular expression
+     * @see mimeTypes
+     */
+    private function buildMimeTypeRegexp($mask)
+    {
+        return '/^' . str_replace('\*', '.*', preg_quote($mask, '/')) . '$/';
     }
 }
