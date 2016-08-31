@@ -8,6 +8,7 @@ use Yii;
 use yii\base\InvalidConfigException;
 use yii\db\ActiveRecord;
 use yii\helpers\Url;
+use yii\web\UploadedFile;
 
 class UploadImage extends BaseAction
 {
@@ -16,6 +17,7 @@ class UploadImage extends BaseAction
      * @var callable Замыкание для получения модели по ID.
      */
     public $getModel;
+    public $uploadAttribute;
 
     /**
      * @var string Атрибут Модели содержащий ID Attachment
@@ -95,14 +97,22 @@ class UploadImage extends BaseAction
             }
             return false;
         };
+        $uploads = [];
+        foreach (UploadedFile::getInstances($model, $this->uploadAttribute) as $index => $f) {
+            $uploads['name'][$index] = $f->name;
+            $uploads['tmp_name'][$index] = $f->tempName;
+            $uploads['type'][$index] = $f->type;
+            $uploads['size'][$index] = $f->size;
+            $uploads['error'][$index] = $f->error;
+        }
 
         Yii::$app->response->format = \yii\web\Response::FORMAT_JSON;
         $attachManager = $this->getAttachManager();
         return $attachManager->uploadImage(
+            $uploads,
             $this->pathNamespace,
             $this->validatorProfile,
             $this->thumbnailProfile,
-            $model->formName(),
             $image,
             $thumb,
             $avatarCallback
