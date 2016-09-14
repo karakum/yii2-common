@@ -25,7 +25,7 @@ class MarkDeletedBehavior extends Behavior
 
     /**
      * @var string the attribute that will receive timestamp value
-     * Set this property to false if you do not want to record the creation time.
+     * Set this property to false if you do not want to record the deletion time.
      */
     public $deletedAtAttribute = 'deleted_at';
 
@@ -73,7 +73,7 @@ class MarkDeletedBehavior extends Behavior
     {
         /** @var ActiveRecord $model */
         $model = $event->sender;
-        if ($model->getAttribute($this->statusAttribute) == $this->deletedStatus) {
+        if ($this->deletedAtAttribute && $model->getAttribute($this->statusAttribute) == $this->deletedStatus) {
             $model->updateAttributes([
                 $this->deletedAtAttribute => new Expression('NOW()'),
             ]);
@@ -87,7 +87,7 @@ class MarkDeletedBehavior extends Behavior
         $model = $event->sender;
         $changedAttributes = $event->changedAttributes;
 
-        if (array_key_exists($this->statusAttribute, $changedAttributes)) {
+        if ($this->deletedAtAttribute && array_key_exists($this->statusAttribute, $changedAttributes)) {
             if ($model->getAttribute($this->statusAttribute) == $this->deletedStatus) {
                 $model->updateAttributes([
                     $this->deletedAtAttribute => new Expression('NOW()'),
@@ -108,8 +108,12 @@ class MarkDeletedBehavior extends Behavior
         $model = $event->sender;
         if ($model->getAttribute($this->statusAttribute) != $this->deletedStatus) {
             $model->setAttribute($this->statusAttribute, $this->deletedStatus);
-            $model->setAttribute($this->deletedAtAttribute, new Expression('NOW()'));
-            $model->save(false, [$this->statusAttribute, $this->deletedAtAttribute]);
+            if ($this->deletedAtAttribute) {
+                $model->setAttribute($this->deletedAtAttribute, new Expression('NOW()'));
+                $model->save(false, [$this->statusAttribute, $this->deletedAtAttribute]);
+            } else {
+                $model->save(false, [$this->statusAttribute]);
+            }
             $model->refresh();
             if ($this->onMarkFlashMessage) {
                 Yii::$app->session->addFlash('success', Yii::$app->getI18n()->format($this->onMarkFlashMessage, [
