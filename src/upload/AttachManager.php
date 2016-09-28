@@ -150,7 +150,16 @@ class AttachManager extends Component
                 $newImage->size = $fileSystem->getFilesize($newImage->getFullName());
 
                 $thImg = ImageManagerStatic::make($file->path);
+                $w = $thImg->getWidth();
+                $h = $thImg->getHeight();
+                $width = $thumbProfile['width'];
+                $height = $thumbProfile['height'];
+                if ($width == $height && $w != $h) {// если запросили квадрат, но имеем прямоугольник - вырежем квадрат по центру
+                    $minSide = min($w, $h);
+                    $thImg->crop($minSide, $minSide, (int)(($w - $minSide) / 2), (int)(($h - $minSide) / 2));
+                }
                 $thImg->resize($thumbProfile['width'], $thumbProfile['height']);
+
                 $thumbName = $fileNameGenerator->getFileName('thumb' . $file->name, $file->type, null, 0, null, $fileUpload);
                 $thumbPath = $pathResolver->getUploadPath($thumbName);
 
