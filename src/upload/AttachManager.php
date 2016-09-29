@@ -605,7 +605,7 @@ class AttachManager extends Component
         }
         $res[$att->path_id][] = $att->file;
         /** @var Thumbnails $th */
-        $thumbs = $att->getThumbnails()->all();
+        $thumbs = $att->thumbnails;
         foreach ($thumbs as $th) {
             $res[$th->path_id][] = $th->file;
         }
@@ -617,8 +617,9 @@ class AttachManager extends Component
         Yii::trace($oldFiles);
         $pathManager = $this->getPathManager();
         $fileSystem = new \FileUpload\FileSystem\Simple();
+        $pathList = PathOrganizer::find()->where(['id' => array_keys($oldFiles)])->indexBy('id')->all();
         foreach ($oldFiles as $pathId => $files) {
-            $pathObj = PathOrganizer::findOne($pathId);
+            $pathObj = $pathList[$pathId];
             foreach ($files as $file) {
                 $f = $pathObj->getBasePath($file);
                 Yii::warning('Remove old file: ' . $f);
