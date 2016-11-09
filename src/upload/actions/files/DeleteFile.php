@@ -26,6 +26,7 @@ class DeleteFile extends Action
      * @var string Атрибут для связи с моделью
      */
     public $fileLinkTo;
+    public $fileLinkToUser = false;
 
     public function run($id, $f)
     {
@@ -36,11 +37,17 @@ class DeleteFile extends Action
         $model = call_user_func($this->getModel, $id);
 
         $fileClass = $this->fileClass;
-        /** @var ActiveRecord $file */
-        $file = $fileClass::find()->andWhere([
+        $query = $fileClass::find()->andWhere([
             'id' => $f,
             $this->fileLinkTo => $model->id,
-        ])->one();
+        ]);
+        if ($this->fileLinkToUser) {
+            $query->andWhere([
+                $this->fileLinkToUser => Yii::$app->user->id,
+            ]);
+        }
+        /** @var ActiveRecord $file */
+        $file = $query->one();
 
         if (!$file) {
             throw new NotFoundHttpException('Запрошенная страница не существует.');

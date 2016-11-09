@@ -25,6 +25,7 @@ class CropFile extends Action
      * @var string Атрибут Picture для связи с моделью
      */
     public $fileLinkTo;
+    public $fileLinkToUser = false;
     public $pathNamespace;
 
     public function run($id, $f)
@@ -36,11 +37,17 @@ class CropFile extends Action
         $model = call_user_func($this->getModel, $id);
 
         $fileClass = $this->fileClass;
-        /** @var ActiveRecord $file */
-        $file = $fileClass::find()->andWhere([
+        $query = $fileClass::find()->andWhere([
             'id' => $f,
             $this->fileLinkTo => $model->id,
-        ])->one();
+        ]);
+        if ($this->fileLinkToUser) {
+            $query->andWhere([
+                $this->fileLinkToUser => Yii::$app->user->id,
+            ]);
+        }
+        /** @var ActiveRecord $file */
+        $file = $query->one();
 
         if (!$file) {
             throw new NotFoundHttpException('Запрошенная страница не существует.');
@@ -61,7 +68,7 @@ class CropFile extends Action
                  * @param Attachment $image
                  * @return bool
                  */
-                $avatarCallback = function ($image) use ($file,$model) {
+                $avatarCallback = function ($image) use ($file, $model) {
                     if ($image->save()) {
                         $file->setAttribute($this->fileAttachmentAttr, $image->id);
                         if ($file->save()) {

@@ -24,6 +24,7 @@ class UploadFile extends Action
      * @var string Атрибут для связи с моделью
      */
     public $fileLinkTo;
+    public $fileLinkToUser = false;
     public $fileClass;
     public $fileAttachmentAttr;
     public $fileThumbnailAttr;
@@ -62,6 +63,9 @@ class UploadFile extends Action
 
                 $picture = new $this->fileClass;
                 $picture->setAttribute($this->fileLinkTo, $model->id);
+                if ($this->fileLinkToUser) {
+                    $picture->setAttribute($this->fileLinkToUser, Yii::$app->user->id);
+                }
                 $picture->setAttribute($this->fileAttachmentAttr, $image->id);
                 if ($thumb) {
                     $picture->setAttribute($this->fileThumbnailAttr, $thumb->id);
