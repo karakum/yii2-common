@@ -3,6 +3,7 @@
 namespace karakum\common\upload\models;
 
 use karakum\common\components\StatusActiveRecord;
+use karakum\common\upload\AttachManager;
 use karakum\PathRegistry\PathOrganizer;
 use Yii;
 
@@ -42,12 +43,14 @@ class Attachment extends StatusActiveRecord
      */
     public function rules()
     {
+        /** @var AttachManager $attachManager */
+        $attachManager = Yii::$app->attachManager;
         return [
             [['user_id', 'path_id', 'name', 'file', 'mime_type'], 'required'],
             [['user_id', 'path_id', 'size', 'status'], 'integer'],
             [['name', 'file', 'mime_type'], 'string', 'max' => 255],
             [['path_id'], 'exist', 'skipOnError' => true, 'targetClass' => PathOrganizer::className(), 'targetAttribute' => ['path_id' => 'id']],
-            [['user_id'], 'exist', 'skipOnError' => true, 'targetClass' => Yii::$app->user->identityClass, 'targetAttribute' => ['user_id' => 'id']],
+            [['user_id'], 'exist', 'skipOnError' => true, 'targetClass' => $attachManager->identityClass, 'targetAttribute' => ['user_id' => 'id']],
             ['status', 'default', 'value' => self::STATUS_ACTIVE],
             ['status', 'in', 'range' => array_keys(self::statusList())],
         ];
@@ -87,7 +90,9 @@ class Attachment extends StatusActiveRecord
      */
     public function getUser()
     {
-        return $this->hasOne(Yii::$app->user->identityClass, ['id' => 'user_id']);
+        /** @var AttachManager $attachManager */
+        $attachManager = Yii::$app->attachManager;
+        return $this->hasOne($attachManager->identityClass, ['id' => 'user_id']);
     }
 
     /**
