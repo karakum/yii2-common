@@ -68,6 +68,7 @@ class SearchableBehavior extends Behavior
     {
         /** @var ActiveRecord $model */
         $model = $event->sender;
+        $model->refresh();
         $this->generateSearchAttribute($model);
     }
 
